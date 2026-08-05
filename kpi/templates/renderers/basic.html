@@ -1,0 +1,17 @@
+{% extends "base_no_static.html" %}
+
+{% block title %}DataMovin API{% endblock %}
+
+{% block body %}
+    <h1>DataMovin API</h1>
+    <p>For help with the DataMovin API, visit <a href="https://movin.com.ar/product-datos-campo">DataMovin support</a>.</p>
+    <p>You can also <a href="{% url 'swagger-ui' %}?q={{ q_param }}">check the official API documentation</a> for a detailed documentation of all available endpoints.</p>
+    <hr>
+    {% if root %}
+        <p>This is the root of the API. Please access an endpoint for a meaningful response.</p>
+    {% else %}
+        {% autoescape on %}
+        <pre>{{ pretty|urlize }}</pre>
+        {% endautoescape %}
+    {% endif %}
+{% endblock %}

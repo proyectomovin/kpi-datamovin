@@ -1,0 +1,41 @@
+db.sqlite3
+*.pyc
+exported_survey_drafts
+node_modules
+/src/
+kpi/static/components
+misc
+jsapp/compiled
+jsapp/tmp
+jsapp/js/libs/xlform.js
+*sublime-*
+~*
+*.orig
+whoosh_index
+tmp
+staticfiles
+.cache
+.sass-cache
+webpack-stats.json
+sensitive_data.json
+test/compiled/*
+.idea/
+celerybeat-schedule
+deployments.json
+.DS_Store
+jsapp/fonts
+media
+env
+public
+.venv
+storybook-static
+emails
+.claude/
+
+# Ignore locale build files.
+locale/**/*.mo
+# Treat source en locale PO file as a build file.
+locale/en/LC_MESSAGES/*.po
+
+# We post changelog in github releases, but generate it here. Let's not accidentally commit it.
+CHANGELOG.md

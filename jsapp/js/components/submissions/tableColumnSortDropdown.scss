@@ -1,0 +1,40 @@
+@use 'scss/mixins';
+@use 'scss/colors';
+@use 'scss/libs/_mdl';
+
+.table-column-sort-dropdown {
+  display: block;
+  width: 100%;
+
+  .table-column-sort-dropdown-trigger-button {
+    @include mixins.buttonReset;
+
+    display: block;
+    width: 100%;
+    padding: 0;
+
+    &:hover,
+    &:hover .k-icon {
+      color: colors.$kobo-blue !important;
+    }
+  }
+
+  .table-column-sort-dropdown-trigger {
+    @include mixins.centerRowFlex;
+    align-items: flex-start;
+    // We need to override the default "center" from react-table, but it also
+    // needs to work with `dir="auto"`
+    text-align: initial;
+    line-height: 20px;
+    gap: 5px;
+
+    .column-header-title {
+      flex: 1;
+    }
+
+    .k-icon.k-icon-sort-ascending,
+    .k-icon.k-icon-sort-descending {
+      color: colors.$kobo-teal;
+    }
+  }
+}

@@ -1,0 +1,213 @@
+@use 'scss/mixins';
+@use 'scss/colors';
+
+@keyframes processing {
+  0% {
+    opacity: 1;
+  }
+
+  25% {
+    opacity: 0.6;
+  }
+
+  50% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+.project-downloads__advanced-button {
+  margin-bottom: 2px;
+}
+
+.project-downloads {
+  hr {
+    display: block;
+    width: 100%;
+    height: 1px;
+    background-color: colors.$kobo-gray-300;
+    margin: 0;
+    border: 0;
+  }
+
+  > .form-view__cell.form-view__cell--box:last-child {
+    margin-bottom: 40px;
+  }
+
+  .project-downloads__selector-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+
+    > * {
+      width: 33%;
+
+      &:not(:last-child) {
+        margin-right: 20px;
+      }
+    }
+  }
+
+  .kobo-select {
+    .kobo-select__control {
+      border: 1px solid colors.$kobo-gray-300;
+    }
+  }
+
+  .project-downloads-group-textbox {
+    @include mixins.centerRowFlex;
+    gap: 10px;
+    margin-top: 4px;
+
+    > * {
+      flex: 5;
+    }
+  }
+
+  .project-downloads-group-textbox__title {
+    font-size: 12px;
+    text-align: right;
+
+    &.project-downloads-group-textbox__title--disabled {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+  }
+
+  .custom-export-name-textbox {
+    margin-left: 28px;
+    width: calc(100% - 28px);
+    margin-top: 4px;
+    display: block;
+  }
+
+  .project-downloads__advanced-view {
+    display: flex;
+    align-items: stretch; // needed for questions list stretching
+    flex-wrap: wrap;
+    padding-top: 12px;
+  }
+
+  .project-downloads__title {
+    margin-bottom: 6px;
+    display: inline-block;
+  }
+
+  .project-downloads__column {
+    margin-bottom: 20px;
+
+    &.project-downloads__column--left {
+      margin-right: 20px;
+      width: 33%;
+    }
+
+    &.project-downloads__column--right {
+      flex: 1;
+      position: relative; // needed to stretch question list with GeoJSON checkbox visible
+    }
+
+    .project-downloads__column-row {
+      display: block;
+
+      &:not(:last-child) {
+        margin-bottom: 20px;
+      }
+
+      &.project-downloads__column-row--rows-selector-header {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 10px;
+
+        .toggle-switch {
+          flex: 1;
+        }
+
+        .project-downloads__vr {
+          width: 1px;
+          height: 1em;
+          display: block;
+          margin: 0;
+          background-color: colors.$kobo-gray-300;
+        }
+      }
+    }
+  }
+
+  .multi-checkbox {
+    position: absolute;
+    top: 30px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    margin-top: 6px;
+  }
+
+  .project-downloads__submit-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    align-content: flex-end;
+    margin-top: 20px;
+
+    .project-downloads__exports-selector {
+      width: 33%;
+      position: relative;
+    }
+
+    .project-downloads__delete-settings-button {
+      // positioning
+      position: absolute;
+      left: 100%;
+      margin-left: 8px;
+      bottom: 0;
+    }
+  }
+
+  .project-downloads__anonymous-row {
+    display: flex;
+    align-items: flex-end;
+    align-content: flex-end;
+
+    .project-downloads__exports-selector {
+      width: 33%;
+      margin-right: 20px;
+    }
+  }
+
+  .project-downloads__legacy-iframe-wrapper {
+    iframe {
+      width: 100%;
+      height: 250px;
+      border: 1px solid colors.$kobo-gray-300;
+      border-radius: 4px;
+    }
+  }
+
+  .project-downloads__exports-creator {
+    &.project-downloads__exports-creator--loading {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+  }
+
+  .animate-processing {
+    animation: processing 1.5s infinite;
+  }
+
+  .project-downloads__date-wrapper {
+    margin-left: 28px;
+    width: calc(100% - 28px);
+  }
+
+  .project-downloads__date-selector {
+    margin: 0 5px;
+    border: 1px solid colors.$kobo-gray-300;
+    padding: 2px 4px;
+    border-radius: 4px;
+    margin-top: 4px;
+  }
+}

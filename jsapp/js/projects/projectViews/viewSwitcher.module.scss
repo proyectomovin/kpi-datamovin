@@ -1,0 +1,72 @@
+@use 'sass:color';
+@use 'scss/colors';
+@use 'scss/mixins';
+
+.root {
+  display: inline-block;
+  vertical-align: top;
+}
+
+.root.isMenuVisible .trigger {
+  :global {
+    .k-icon {
+      color: colors.$kobo-blue;
+    }
+  }
+}
+
+.trigger {
+  @include mixins.buttonReset;
+  @include mixins.centerRowFlex;
+  font-size: 20px;
+  font-weight: 800;
+  color: colors.$kobo-gray-800;
+  padding: 2px 16px;
+  // we want it to be 32px height
+  line-height: 28px;
+  max-width: 400px;
+
+  :global {
+    label {
+      @include mixins.textEllipsis;
+      pointer-events: none;
+    }
+
+    .k-icon {
+      margin-left: 5px;
+    }
+  }
+
+  &:active {
+    transform: none;
+  }
+}
+
+.triggerSimple {
+  cursor: default;
+}
+
+.menu {
+  @include mixins.floatingRoundedBox;
+  display: block;
+  width: 100%;
+  min-width: 300px;
+  max-height: 200px;
+  max-width: 300px;
+  overflow-x: auto;
+  padding: 20px 0;
+}
+
+.menuOption {
+  @include mixins.buttonReset;
+  @include mixins.textEllipsis;
+  font-size: 16px;
+  font-weight: 500;
+  padding: 10px 30px;
+  width: 100%;
+  text-align: initial;
+
+  &:hover {
+    color: colors.$kobo-blue;
+  }
+}

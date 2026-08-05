@@ -1,0 +1,16 @@
+{% load i18n %}
+
+{% block content %}{% autoescape off %}
+
+{% blocktrans trimmed %}Hello from DataMovin,{% endblocktrans %}
+{% blocktrans trimmed %}You are receiving this email because you or someone else has requested a password for their DataMovin account.{% endblocktrans %}
+{% blocktrans trimmed %}However, we do not have any record of an account with email {{ email }} in our database.{% endblocktrans %}
+
+{% blocktrans trimmed %}If you did not request a password reset, you can safely ignore this email.{% endblocktrans %}
+
+{% blocktrans trimmed %}If it was you, please verify the email address or contact hola@movin.com.ar for assistance.{% endblocktrans %}
+
+{% endautoescape %}{% endblock %}
+
+{% blocktrans trimmed %}Best,{% endblocktrans %}
+DataMovin

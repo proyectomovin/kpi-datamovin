@@ -1,0 +1,20 @@
+@use 'scss/colors';
+
+.asset-name {
+  &.asset-name--empty {
+    font-style: italic;
+  }
+
+  &.asset-name--has-long-words {
+    -ms-word-break: break-all;
+     word-break: break-all;
+     hyphens: auto;
+  }
+
+  small {
+    color: colors.$kobo-gray-700;
+    margin-left: 5px;
+    font-size: smaller;
+    font-style: italic;
+  }
+}

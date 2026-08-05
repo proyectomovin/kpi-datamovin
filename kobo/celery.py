@@ -1,0 +1,37 @@
+import os
+
+import celery
+from django.apps import apps
+
+# http://celery.readthedocs.org/en/latest/django/first-steps-with-django.html
+
+# Attempt to determine the project name from the directory containing this file
+PROJECT_NAME = os.path.basename(os.path.dirname(__file__))
+
+# Use celery-specific settings to allow a longer DB statement_timeout for
+# long-running tasks. Fall back to prod_celery even if DJANGO_SETTINGS_MODULE
+# is set to prod, so existing K8s/Docker configs don't need to change.
+if os.environ.get('DJANGO_SETTINGS_MODULE') in (None, f'{PROJECT_NAME}.settings.prod'):
+    os.environ['DJANGO_SETTINGS_MODULE'] = f'{PROJECT_NAME}.settings.prod_celery'
+
+Celery = celery.Celery
+
+celery_app = Celery(PROJECT_NAME)
+# Using a string here means the worker will not have to
+# pickle the object when using Windows.
+celery_app.config_from_object('django.conf:settings', namespace='CELERY')
+
+# The `celery_app.autodiscover_tasks(lambda: settings.INSTALLED_APPS)`
+# technique described in
+# http://docs.celeryproject.org/en/latest/django/first-steps-with-django.html
+# fails when INSTALLED_APPS includes a "dotted path to the appropriate
+# AppConfig subclass" as recommended by
+# https://docs.djangoproject.com/en/1.8/ref/applications/#configuring-applications.
+# Ask Solem recommends the following workaround; see
+# https://github.com/celery/celery/issues/2248#issuecomment-97404667
+celery_app.autodiscover_tasks(lambda: [n.name for n in apps.get_app_configs()])
+
+
+@celery_app.task(bind=True)
+def debug_task(self):
+    print('Request: {0!r}'.format(self.request))

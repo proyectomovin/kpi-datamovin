@@ -1,0 +1,98 @@
+@use 'scss/mixins';
+@use 'scss/colors';
+
+$badge-height-xs: 20px;
+$badge-font-xs: 11px;
+
+$badge-height-s: 24px;
+$badge-font-s: 12px;
+
+$badge-height-m: 28px;
+$badge-font-m: 13px;
+
+$badge-height-l: 32px;
+$badge-font-l: 14px;
+
+.root {
+  display: inline-block;
+  vertical-align: middle;
+  text-align: center;
+  max-width: 100%;
+}
+
+.root:not(.disableShortening) {
+  @include mixins.textEllipsis;
+}
+
+.icon {
+  vertical-align: top;
+}
+
+.color-light-storm {
+  color: colors.$kobo-gray-800;
+  background-color: colors.$kobo-light-storm;
+}
+
+.color-light-amber {
+  color: colors.$kobo-dark-amber;
+  background-color: colors.$kobo-light-amber;
+}
+
+.color-light-blue {
+  color: colors.$kobo-dark-blue;
+  background-color: colors.$kobo-bg-blue;
+}
+
+.color-light-red {
+  color: colors.$kobo-dark-red;
+  background-color: colors.$kobo-light-red;
+}
+
+.color-light-teal {
+  color: colors.$kobo-dark-teal;
+  background-color: colors.$kobo-light-teal;
+}
+
+.color-light-green {
+  color: colors.$kobo-dark-green;
+  background-color: colors.$kobo-light-green;
+}
+
+.color-dark-gray {
+  color: colors.$kobo-white;
+  background-color: colors.$kobo-gray-700;
+}
+
+@mixin badge-size($size, $font) {
+  // NOTE: icon size is already handled by badge.tsx file rendering proper <Icon> component
+  height: $size;
+  min-width: $size;
+  line-height: $size;
+  font-size: $font;
+  border-radius: $size * 0.5;
+  padding: 0 $size * 0.2;
+
+  &.hasLabel {
+    padding: 0 $size * 0.4;
+  }
+
+  .icon + .label {
+    margin-left: $size * 0.15;
+  }
+}
+
+.size-xs {
+  @include badge-size($badge-height-xs, $badge-font-xs);
+}
+
+.size-s {
+  @include badge-size($badge-height-s, $badge-font-s);
+}
+
+.size-m {
+  @include badge-size($badge-height-m, $badge-font-m);
+}
+
+.size-l {
+  @include badge-size($badge-height-l, $badge-font-l);
+}

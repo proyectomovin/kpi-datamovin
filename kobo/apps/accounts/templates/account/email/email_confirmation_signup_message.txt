@@ -1,0 +1,36 @@
+{% load i18n %}
+{% load customize_email_content %}
+
+{% autoescape off %}
+{% with content='email_confirmation_signup_message'|email_template %}
+{% spaceless %}
+{% if content.section_one or content.section_one == '' %}
+{% convert_placeholders content.section_one activate_url user %}
+{% else %}
+{% blocktrans trimmed with first_name=user.first_name|default:user.username %}Hi {{ first_name }},{% endblocktrans %}
+
+{% blocktrans trimmed %}Welcome to DataMovin! To get started, please activate your account by clicking the link below:{% endblocktrans %}
+
+{{ activate_url }}
+
+{% blocktrans trimmed %}This link will expire in 24 hours for security reasons. If it expires or you need a new one, simply sign in with your credentials (username and password) and a new link will be sent to you.{% endblocktrans %}
+
+{% endif %}
+{% endspaceless %}
+
+{% spaceless %}
+{% if content.section_two or content.section_two == '' %}
+{% convert_placeholders content.section_two activate_url user %}
+{% else %}
+{% blocktrans trimmed %}You can find DataMovin help and service information here:{% endblocktrans %}
+
+{% blocktrans trimmed %}https://movin.com.ar/product-datos-campo{% endblocktrans %}
+
+{% blocktrans trimmed %}For assistance, contact hola@movin.com.ar.{% endblocktrans %}
+
+{% blocktrans trimmed %}Thanks for signing up!{% endblocktrans %}
+{% blocktrans trimmed %}The DataMovin Team{% endblocktrans %}
+{% endif %}
+{% endspaceless %}
+{% endwith %}
+{% endautoescape %}

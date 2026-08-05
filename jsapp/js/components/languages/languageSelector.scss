@@ -1,0 +1,217 @@
+@use 'scss/colors';
+@use 'scss/mixins';
+
+.language-selector {
+  background: colors.$kobo-white;
+}
+
+.language-selector__title {
+  font-size: 18px;
+  font-weight: 400;
+  text-align: center;
+  line-height: 20px;
+  margin: 0 auto 24px;
+}
+
+/*
+ * Search box and selected language
+ */
+
+.language-selector__search-box-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  align-content: center;
+  justify-content: stretch;
+}
+
+// The arrow icon
+.language-selector__search-box-row > .k-icon {
+  margin: 0 20px;
+  color: colors.$kobo-gray-400;
+  transform: translateY(11px);
+}
+
+.language-selector__search-box-wrapper {
+  flex: 1;
+}
+
+.language-selector__source-label,
+.language-selector__search-box-label {
+  color: colors.$kobo-gray-600;
+  font-size: 12px;
+  line-height: 1;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.language-selector__source-language {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  line-height: 40px;
+  font-size: 16px;
+  font-weight: 500;
+
+  span {
+    // For multiline languages (long names).
+    display: block;
+    line-height: 1.2;
+  }
+}
+
+.language-selector__source-language > .k-icon {
+  margin-right: 6px;
+  color: colors.$kobo-gray-500;
+}
+
+.language-selector__selected-language,
+.language-selector__search-box {
+  border: 2px solid colors.$kobo-gray-300;
+  border-radius: 6px;
+  height: 40px;
+  line-height: 40px - (2 * 2px); // minus the border
+  display: flex;
+  flex-direction: row;
+  align-content: center;
+  align-items: center;
+  position: relative;
+
+  // We want the icon to click through to text input.
+  .k-icon.k-icon-spinner,
+  .k-icon.k-icon-search,
+  .k-icon.k-icon-language-alt {
+    pointer-events: none;
+    position: absolute;
+    left: 12px;
+    color: colors.$kobo-gray-400;
+  }
+}
+
+.language-selector__search-box:focus-within {
+  border-color: colors.$kobo-blue;
+}
+
+.language-selector__selected-language-label,
+.language-selector__search-box-input {
+  flex: 1;
+  border: 0;
+  padding: 0 40px;
+  margin: 0;
+  background: transparent;
+  line-height: 40px;
+}
+
+.language-selector__selected-language-label {
+  // Add ellipsis for long languages.
+  @include mixins.textEllipsis;
+
+  color: colors.$kobo-blue;
+}
+
+.language-selector__search-box-input {
+  &::placeholder {
+    opacity: 1;
+    color: colors.$kobo-gray-600;
+  }
+
+  &:focus {
+    outline: none;
+  }
+
+  &::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    display: none;
+  }
+}
+
+.language-selector__clear-selected-language,
+.language-selector__clear-search-box {
+  @include mixins.buttonReset;
+  margin-right: 12px;
+  color: colors.$kobo-gray-400;
+
+  &:hover {
+    color: colors.$kobo-gray-800;
+  }
+
+  .k-icon.k-icon-close {
+    vertical-align: middle;
+  }
+}
+
+/*
+ * Languages list
+ */
+
+.language-selector__list {
+  min-height: 100px;
+  max-height: 200px;
+  margin: 16px 0 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  ul {
+    height: 100%;
+    list-style: none;
+    padding: 0;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-content: flex-start;
+  }
+
+  li {
+    // One third minus margins.
+    width: calc(33.33% - #{50px});
+    // This is the size that is small enough to allows 3 columns to appear
+    // in processing view.
+    min-width: 140px;
+    margin-right: 50px;
+    margin-bottom: 5px;
+
+    &.language-selector__not-found-message {
+      width: 100%;
+      margin-right: 0;
+    }
+
+    &:last-child {
+      width: auto;
+      margin-right: 0;
+    }
+
+    &:only-child {
+      width: 100%;
+      margin-right: 0;
+    }
+  }
+}
+
+.language-selector__not-found-message {
+  padding: 6px 8px;
+  text-align: initial;
+  font-style: italic;
+}
+
+.language-selector__help-bar {
+  border-top: 2px solid colors.$kobo-gray-300;
+  display: flex;
+  flex-direction: row;
+  align-content: center;
+  justify-content: center;
+  align-items: center;
+  line-height: 40px - (2 * 2px); // mimick the search box size
+  margin-top: 16px;
+  padding-top: 4px;
+}
+
+.language-selector__line {
+  width: calc(100% - #{5px});
+  height: 1px;
+  border: 0;
+  // Bottom margin is bigger to be in line with what <li> already have.
+  margin: 5px 0 #{5px + 5px} 0;
+  padding: 0;
+  background-color: colors.$kobo-gray-300;
+}

@@ -1,0 +1,349 @@
+@use 'scss/colors';
+@use 'scss/breakpoints';
+@use 'scss/libs/_mdl';
+@use 'scss/_variables';
+@use 'scss/mixins';
+@use 'scss/z-indexes';
+
+#data-map {
+  height: 100%;
+  width: 100%;
+}
+
+.form-view--map {
+  position: relative;
+
+  .loading {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    background: rgba(colors.$kobo-white, 0.8);
+  }
+}
+
+.leaflet-top.leaflet-right {
+  margin-right: 56px;
+
+  // right margin plus icon size
+}
+
+.leaflet-control-layers-toggle {
+  display: none;
+
+  &.leaflet-control-layers-expanded {
+    display: block;
+  }
+}
+
+.leaflet-popup-content {
+  pre {
+    font-family: mdl.$font;
+    white-space: pre-line;
+    max-height: 200px;
+    overflow-x: auto;
+  }
+}
+
+body .leaflet-control-layers,
+.leaflet-touch .leaflet-control-layers {
+  border: none;
+  border-radius: 6px !important;
+
+  @include mdl.box-shadow;
+
+  margin-right: 12px;
+  // Keep the layers panel below the top row of map action buttons.
+  margin-top: 56px;
+}
+
+.map-legend-dialog {
+  height: 250px;
+  max-height: 50vh;
+  min-width: 180px;
+  max-width: 300px;
+
+  .maplist-contents {
+    display: block;
+    margin-bottom: 5px;
+    height: 100%;
+    overflow: auto;
+  }
+
+  .map-marker-item {
+    padding: 4px 6px;
+    position: relative;
+
+    &::after {
+      position: absolute;
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 8px;
+      right: 6px;
+      top: 12px;
+    }
+
+    &.selected {
+      background: colors.$kobo-gray-200;
+
+      &::after {
+        content: '';
+        background: colors.$kobo-blue;
+      }
+    }
+
+    &.unselected {
+      opacity: 0.6;
+
+      &::after {
+        content: '';
+        background: colors.$kobo-gray-500;
+      }
+
+      &:hover {
+        opacity: 0.9;
+      }
+    }
+
+    &.map-marker-reset {
+      text-align: right;
+      font-size: 12px;
+      color: colors.$kobo-blue;
+      opacity: 0.8;
+      cursor: pointer;
+
+      &:hover {
+        opacity: 1;
+      }
+    }
+  }
+
+  span {
+    vertical-align: middle;
+    display: inline-block;
+    font-size: 13px;
+  }
+
+  span.map-marker {
+    margin-right: 8px;
+    text-align: center;
+    line-height: 22px;
+    min-width: 24px;
+    max-width: 48px;
+    width: auto;
+    height: 24px;
+    padding: 0 3px;
+    position: relative;
+    text-shadow: 0 0 1px colors.$kobo-white;
+    color: colors.$kobo-gray-800;
+
+    &::after {
+      position: absolute;
+      width: 10px;
+      content: '';
+      height: 22px;
+      right: 1px;
+      top: 1px;
+      border-bottom-right-radius: 12px;
+      border-top-right-radius: 12px;
+      z-index: -1;
+    }
+  }
+
+  span.map-marker-label {
+    width: calc(100% - 56px);
+    @include mixins.textEllipsis;
+    cursor: pointer;
+  }
+}
+
+.form-view__map {
+  .loading {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(colors.$kobo-white, 0.5);
+    z-index: z-indexes.$z-map-settings;
+  }
+}
+
+.map-settings {
+  .form-modal__item--layer-upload label[for='name'] {
+    display: block;
+    padding: 10px 0 20px;
+    position: relative;
+    font-size: variables.$base-font-size;
+  }
+
+  .form-modal__item--list-files {
+    border: 1px solid colors.$kobo-gray-300;
+    padding: 10px;
+    max-width: 600px;
+    margin-bottom: 20px;
+
+    .list-file-row {
+      border-top: 1px solid colors.$kobo-gray-300;
+      padding: 5px;
+
+      > span {
+        display: inline-block;
+        vertical-align: middle;
+      }
+
+      .file-type {
+        width: 15%;
+        text-transform: uppercase;
+      }
+
+      .file-layer-name {
+        @include mixins.textEllipsis;
+        width: 80%;
+        font-weight: 600;
+      }
+
+      .file-delete {
+        width: 5%;
+        text-align: right;
+        cursor: pointer;
+
+        i {
+          font-size: 24px;
+          color: colors.$kobo-mid-red;
+        }
+      }
+    }
+  }
+
+  .form-modal__item--layer-upload {
+    position: relative;
+
+    input {
+      width: calc(100% - 140px);
+    }
+
+    .dropzone {
+      // !important used because strangely, in some browsers, there is in an inline position: relative on the element
+      position: absolute !important;
+      right: 0;
+      width: 120px;
+      bottom: 0;
+      text-align: right;
+      min-height: 30px;
+    }
+  }
+}
+
+.map-settings__colors {
+  text-align: center;
+
+  .map-marker {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+  }
+
+  .form-modal__item--map-color-item {
+    margin-bottom: 0;
+  }
+}
+
+.map-settings__GeoQuestions {
+  label {
+    display: block;
+    margin-bottom: 10px;
+
+    input {
+      margin-right: 8px;
+    }
+  }
+}
+
+.change-limit-warning {
+  color: red;
+}
+
+.change-limit-form {
+  @include mixins.centerRowFlex;
+  gap: 10px;
+}
+
+.change-limit-slider {
+  flex: 1;
+}
+
+.change-limit-slider-value {
+  min-width: 80px;
+}
+
+.map-no-geopoint {
+  text-align: center;
+  font-weight: bold;
+  color: colors.$kobo-white;
+}
+
+.map-no-geopoint-wrapper {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 100%;
+}
+
+.map-transparent-background {
+  height: 100%;
+  position: absolute;
+  width: 100%;
+  z-index: z-indexes.$z-map-settings-overlay;
+  background: rgb(100 100 100 / 70%);
+}
+
+// ClusterMarker overrides
+
+.marker-cluster-small {
+  background-color: rgb(253 187 132 / 40%);
+}
+
+.marker-cluster-small div {
+  background-color: rgb(253 187 132 / 50%);
+}
+
+.marker-cluster-medium {
+  background-color: rgb(252 141 89 / 40%);
+}
+
+.marker-cluster-medium div {
+  background-color: rgb(252 141 89 / 50%);
+}
+
+.marker-cluster-large {
+  background-color: rgb(239 101 72 / 40%);
+}
+
+.marker-cluster-large div {
+  background-color: rgb(239 101 72 / 50%);
+}
+
+.marker-cluster {
+  background-clip: padding-box;
+  border-radius: 50%;
+}
+
+.marker-cluster div {
+  font-size: 12px;
+  font-family: mdl.$font;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  margin-left: 5px;
+  margin-top: 5px;
+  text-align: center;
+  color: colors.$kobo-gray-800;
+}
+
+.marker-cluster span {
+  line-height: 20px;
+}

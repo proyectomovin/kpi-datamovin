@@ -1,0 +1,29 @@
+-r requirements.in
+
+Fabric
+coverage
+coveralls
+ddt
+ipython
+mock
+model-bakery
+mongomock
+pytest
+pytest-cov
+pytest-django
+pytest-env
+pytest-xdist
+fakeredis
+freezegun
+moto[s3]
+django-debug-toolbar
+
+# KoboCAT
+httmock
+simplejson
+
+# Formatter and linters
+ruff
+flake8
+flake8-quotes
+darker[isort]==2.1.1

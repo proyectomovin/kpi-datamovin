@@ -1,0 +1,140 @@
+name: Publish DataMovin KPI
+
+on:
+  push:
+    tags:
+      - "v2.026.21a-datamovin.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Immutable image version without the v prefix
+        required: true
+        default: 2.026.21a-datamovin.1
+
+concurrency:
+  group: publish-datamovin-kpi
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+
+env:
+  IMAGE_NAME: ghcr.io/proyectomovin/kpi-datamovin
+
+jobs:
+  validate:
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/validate.yml
+    permissions:
+      contents: read
+
+  publish:
+    needs: validate
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - name: Resolve and validate immutable version
+        id: version
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MANUAL_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            value="$MANUAL_VERSION"
+          else
+            value="${REF_NAME#v}"
+          fi
+          if [[ ! "$value" =~ ^2\.026\.21a-datamovin\.[1-9][0-9]*$ ]]; then
+            echo "Unsupported immutable version: $value" >&2
+            exit 1
+          fi
+          echo "value=$value" >> "$GITHUB_OUTPUT"
+      - name: Require source commit on main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main:refs/remotes/origin/main --depth=1
+          source_commit=$(git rev-parse "${GITHUB_SHA}^{commit}")
+          if ! git merge-base --is-ancestor "$source_commit" refs/remotes/origin/main; then
+            echo "The release commit is not part of main" >&2
+            exit 1
+          fi
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Refuse an existing immutable image
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          if docker buildx imagetools inspect "$IMAGE_NAME:$VERSION" >/dev/null 2>&1; then
+            echo "Immutable image already exists: $IMAGE_NAME:$VERSION" >&2
+            exit 1
+          fi
+      - name: Resolve image metadata
+        id: image_metadata
+        shell: bash
+        run: |
+          echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+      - id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          build-args: |
+            DATAMOVIN_IMAGE_CREATED=${{ steps.image_metadata.outputs.created }}
+            DATAMOVIN_IMAGE_REVISION=${{ github.sha }}
+            DATAMOVIN_IMAGE_VERSION=${{ steps.version.outputs.value }}
+          push: true
+          sbom: false
+          provenance: false
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.value }}
+            ${{ env.IMAGE_NAME }}:datamovin-stable
+          labels: |
+            org.opencontainers.image.title=DataMovin KPI
+            org.opencontainers.image.description=DataMovin field data application
+            org.opencontainers.image.created=${{ steps.image_metadata.outputs.created }}
+            org.opencontainers.image.source=https://github.com/proyectomovin/kpi-datamovin
+            org.opencontainers.image.version=${{ steps.version.outputs.value }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.url=https://kf.data.movin.com.ar
+            org.opencontainers.image.documentation=https://movin.com.ar/product-datos-campo
+            org.opencontainers.image.vendor=Movin
+            org.opencontainers.image.licenses=AGPL-3.0-only
+      - name: Attest build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: false
+      - name: Attest SPDX SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          sbom-path: sbom.spdx.json
+          push-to-registry: true
+      - name: Publish digest summary
+        run: |
+          echo "Image: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.value }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Digest: ${{ steps.build.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"

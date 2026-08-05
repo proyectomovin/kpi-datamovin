@@ -1,0 +1,103 @@
+# coding: utf-8
+from importlib import import_module
+
+from django.contrib.postgres.fields import ArrayField
+from django.db import models
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
+
+from kpi.fields import KpiUidField
+from kpi.models.abstract_models import AbstractTimeStampedModel
+from .hook_log import HookLogStatus
+
+
+class Hook(AbstractTimeStampedModel):
+
+    # Export types
+    XML = 'xml'
+    JSON = 'json'
+
+    # Authentication levels
+    NO_AUTH = 'no_auth'
+    BASIC_AUTH = 'basic_auth'
+
+    # Export types list
+    EXPORT_TYPE_CHOICES = ((XML, XML), (JSON, JSON))
+
+    # Authentication levels list
+    AUTHENTICATION_LEVEL_CHOICES = ((NO_AUTH, NO_AUTH), (BASIC_AUTH, BASIC_AUTH))
+
+    asset = models.ForeignKey(
+        'kpi.Asset', related_name='hooks', on_delete=models.CASCADE
+    )
+    uid = KpiUidField(uid_prefix='h')
+    name = models.CharField(max_length=255, blank=False)
+    endpoint = models.CharField(max_length=500, blank=False)
+    active = models.BooleanField(default=True)
+    export_type = models.CharField(choices=EXPORT_TYPE_CHOICES, default=JSON, max_length=10)
+    auth_level = models.CharField(choices=AUTHENTICATION_LEVEL_CHOICES, default=NO_AUTH, max_length=10)
+    settings = models.JSONField(default=dict)
+    email_notification = models.BooleanField(default=True)
+    subset_fields = ArrayField(
+        models.CharField(max_length=500),
+        blank=True,
+        default=list,
+    )
+    payload_template = models.TextField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __init__(self, *args, **kwargs):
+        self.__totals = {}
+        super().__init__(*args, **kwargs)
+
+    def __str__(self):
+        return '%s:%s - %s' % (self.asset, self.name, self.endpoint)
+
+    def get_service_definition(self):
+        mod = import_module(
+            'kobo.apps.hook.services.service_{}'.format(self.export_type)
+        )
+        return getattr(mod, 'ServiceDefinition')
+
+    @property
+    @extend_schema_field(OpenApiTypes.INT)
+    def success_count(self):
+        if not self.__totals:
+            self._get_totals()
+        return self.__totals.get(HookLogStatus.SUCCESS)
+
+    @property
+    @extend_schema_field(OpenApiTypes.INT)
+    def failed_count(self):
+        if not self.__totals:
+            self._get_totals()
+        return self.__totals.get(HookLogStatus.FAILED)
+
+    @property
+    @extend_schema_field(OpenApiTypes.INT)
+    def pending_count(self):
+        if not self.__totals:
+            self._get_totals()
+        return self.__totals.get(HookLogStatus.PENDING)
+
+    def _get_totals(self):
+        # TODO add some cache
+        queryset = self.logs.values('status').annotate(
+            values_count=models.Count('status')
+        )
+        queryset.query.clear_ordering(True)
+
+        # Initialize totals
+        self.__totals = {
+            HookLogStatus.SUCCESS: 0,
+            HookLogStatus.FAILED: 0,
+            HookLogStatus.PENDING: 0,
+        }
+        for record in queryset:
+            self.__totals[record.get('status')] = record.get('values_count')
+
+    def reset_totals(self):
+        # TODO remove cache when it's enabled
+        self.__totals = {}

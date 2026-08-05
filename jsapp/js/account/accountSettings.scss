@@ -1,0 +1,94 @@
+@use 'scss/colors';
+@use 'scss/libs/_mdl';
+
+.account-settings {
+  width: 100%;
+  height: 100%;
+  background: colors.$kobo-white;
+  overflow-y: auto;
+  position: relative;
+  padding-top: 50px;
+
+  h4 {
+    margin: 0;
+    font-weight: 400;
+    color: colors.$kobo-gray-800;
+  }
+
+  .kobo-select {
+    font-size: 15px;
+  }
+
+  .form-modal__item--column {
+    width: 100%;
+    height: 100%;
+    margin: 0 auto;
+    padding: 0;
+
+    .form-modal__item--fields {
+      height: calc(100% - #{50px});
+      padding-right: 40px;
+      padding-left: 50px;
+      padding-bottom: 30px;
+      overflow: auto;
+
+      > *:last-child {margin-bottom: 20px;}
+    }
+
+    .form-modal__item--username {
+      min-height: 32px;
+      padding-left: 50px;
+    }
+  }
+
+  .account-settings__actions {
+    position: absolute;
+    top: 50px;
+    right: 0;
+
+    .account-settings-save:last-child {
+      margin-right: 50px;
+    }
+  }
+
+  .form-modal__item {
+    &.form-modal__item--primary-sector {
+      width: 46%;
+      margin-right: 2%;
+      float: left;
+    }
+
+    &.form-modal__item--gender {
+      width: 50%;
+    }
+
+    &.form-modal__item--bio {
+      clear: both;
+    }
+
+    &.form-modal__item--country {
+      width: 50%;
+      margin-right: 4%;
+      float: left;
+    }
+
+    &.form-modal__item--city {
+      width: 46%;
+      float: left;
+    }
+  }
+}
+
+.account-settings-social-row:not(:first-child) {
+  margin-top: 5px;
+}
+
+.anonymous-submission-notice {
+  margin-top: 12px;
+}
+
+.account-settings .form-modal__item--fields {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}

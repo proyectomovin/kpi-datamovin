@@ -1,0 +1,19 @@
+{
+  "name": "DataMovin",
+  "short_name": "DataMovin",
+  "icons": [
+    {
+      "src": "/static/datamovin-android-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/static/datamovin-android-256x256.png",
+      "sizes": "256x256",
+      "type": "image/png"
+    }
+  ],
+  "theme_color": "#FF6D4D",
+  "background_color": "#F8F6F5",
+  "display": "standalone"
+}

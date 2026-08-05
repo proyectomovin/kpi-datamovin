@@ -1,0 +1,46 @@
+@use 'scss/colors';
+
+.body {
+  flex: 5;
+  gap: 10px;
+}
+
+.options {
+  flex: 3;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.currentEmail {
+  font-weight: bold;
+  margin-top: 0;
+}
+
+.unverifiedEmail {
+  display: flex;
+  column-gap: 12px;
+  padding-right: 24px;
+
+  p.blurb {
+    margin: 0;
+  }
+
+  > i {
+    color: colors.$kobo-amber;
+  }
+}
+
+.unverifiedEmailButtons {
+  display: flex;
+  gap: 10px;
+}
+
+.emailText {
+  font-weight: 600;
+}
+
+.emailUpdateDisabled {
+  flex: 5;
+  // To compensate for the `options` class not displaying when there is no email
+  margin-right: calc(30% + 8px);
+}

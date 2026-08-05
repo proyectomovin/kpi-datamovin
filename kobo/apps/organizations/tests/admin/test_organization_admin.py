@@ -1,0 +1,195 @@
+import re
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import pytest
+from django.conf import settings
+from django.test import TestCase
+from django.urls import reverse
+
+from kobo.apps.kobo_auth.shortcuts import User
+from kobo.apps.organizations.models import Organization
+from kpi.constants import PERM_MANAGE_ASSET
+from kpi.models.asset import Asset
+from kpi.tests.utils.transaction import immediate_on_commit
+
+
+class TestOrganizationAdminTestCase(TestCase):
+
+    fixtures = ['test_data']
+
+    def setUp(self):
+        # Create an Organization instance
+        self.organization = Organization.objects.create(
+            id='org1234', name='Test Organization', mmo_override=True
+        )
+
+        self.someuser = User.objects.get(username='someuser')
+        self.anotheruser = User.objects.get(username='anotheruser')
+        self.admin = User.objects.get(username='adminuser')
+
+        self.organization.add_user(self.someuser)  # someuser becomes the owner
+
+        self.asset = Asset.objects.create(owner=self.anotheruser, name='Test Asset')
+        self.client.force_login(self.admin)
+
+    def test_adding_member_does_transfer_their_assets(self):
+        assert self.organization.organization_users.count() == 1
+        assert self.anotheruser.organization != self.organization
+
+        self._manage_user_in_org(remove=False)
+
+        assert self.organization.organization_users.count() == 2
+        assert self.anotheruser.organization == self.organization
+
+        self.asset.refresh_from_db()
+        assert self.asset.owner == self.organization.owner_user_object
+        assert self.asset.owner == self.someuser
+        assert self.asset.has_perm(self.anotheruser, PERM_MANAGE_ASSET)
+
+    def test_removing_member_does_revoke_their_perms(self):
+        self._manage_user_in_org(remove=False)
+        assert self.organization.organization_users.count() == 2
+        assert self.anotheruser.organization == self.organization
+        assert self.asset.has_perm(self.anotheruser, PERM_MANAGE_ASSET)
+
+        self._manage_user_in_org(remove=True)
+
+        assert self.organization.organization_users.count() == 1
+        self.asset.refresh_from_db()
+        assert not self.asset.get_perms(self.anotheruser)
+        assert self.anotheruser.organization != self.organization
+
+    @pytest.mark.skipif(
+        not settings.STRIPE_ENABLED, reason='Requires stripe functionality'
+    )
+    @patch(
+        'kobo.apps.organizations.admin.organization.organization_can_start_manual_subscription',  # noqa
+        return_value=True,
+    )
+    def test_change_form_shows_enabled_manual_invoicing_button(self, _can_start_mock):
+        response = self.client.get(
+            reverse(
+                'admin:organizations_organization_change',
+                kwargs={'object_id': self.organization.id},
+            )
+        )
+
+        content = response.content.decode()
+        assert 'name="_create_manual_subscription"' in content
+        assert 'Create Stripe Subscription' in content
+        assert not re.search(
+            r'name="_create_manual_subscription"[^>]*disabled',
+            content,
+        )
+
+    @pytest.mark.skipif(
+        not settings.STRIPE_ENABLED, reason='Requires stripe functionality'
+    )
+    @patch(
+        'kobo.apps.organizations.admin.organization.organization_can_start_manual_subscription',  # noqa
+        return_value=False,
+    )
+    def test_change_form_disables_manual_invoicing_button_for_active_subscription(
+        self,
+        _can_start_mock,
+    ):
+        response = self.client.get(
+            reverse(
+                'admin:organizations_organization_change',
+                kwargs={'object_id': self.organization.id},
+            )
+        )
+
+        content = response.content.decode()
+        assert re.search(
+            r'name="_create_manual_subscription"[^>]*disabled',
+            content,
+        )
+        assert 'already has an active Stripe subscription' in content
+
+    @pytest.mark.skipif(
+        not settings.STRIPE_ENABLED, reason='Requires stripe functionality'
+    )
+    @patch(
+        'kobo.apps.organizations.admin.organization.create_manual_subscription'
+    )
+    def test_create_manual_subscription_from_admin(
+        self, create_manual_subscription_mock
+    ):
+        create_manual_subscription_mock.return_value = SimpleNamespace(
+            id='sub_manual_invoice'
+        )
+
+        response = self._post_change_form(
+            {'_create_manual_subscription': '1'}
+        )
+
+        create_manual_subscription_mock.assert_called_once_with(
+            self.organization
+        )
+        assert (
+            'Created Stripe customer and community subscription sub_manual_invoice'
+        ) in response.content.decode()
+
+    @pytest.mark.skipif(
+        not settings.STRIPE_ENABLED, reason='Requires stripe functionality'
+    )
+    @patch(
+        'kobo.apps.organizations.admin.organization.organization_can_start_manual_subscription',  # noqa
+        return_value=False,
+    )
+    def test_create_manual_subscription_not_available_with_active_subscription(
+        self, _can_start_mock
+    ):
+        response = self._post_change_form(
+            {'_create_manual_subscription': '1'}
+        )
+
+        assert 'already has an active Stripe subscription' in response.content.decode()
+
+    def _manage_user_in_org(self, remove: bool = False):
+        response = self._post_change_form({}, remove=remove)
+        assert 'was changed successfully' in response.content.decode()
+        return response
+
+    def _post_change_form(self, extra_payload: dict, remove: bool = False):
+
+        payload = {
+            'name': self.organization.name,
+            'slug': self.organization.slug,
+            'is_active': 'on',
+            'mmo_override': 'on',
+            'owner-0-id': self.organization.owner.id,
+            'owner-0-organization': self.organization.id,
+            'owner-TOTAL_FORMS': 1,
+            'owner-INITIAL_FORMS': 1,
+            'owner-MIN_NUM_FORMS': 0,
+            'owner-MAX_NUM_FORMS': 1,
+            'organization_users-TOTAL_FORMS': 1,
+            'organization_users-INITIAL_FORMS': 0,
+            'organization_users-MIN_NUM_FORMS': 0,
+            'organization_users-0-user': self.anotheruser.pk,
+            'organization_users-0-id': '',
+            'organization_users-0-organization': self.organization.id,
+            'organization_users-__prefix__-id': '',
+            'organization_users-__prefix__-organization': self.organization.id,
+        }
+
+        if remove:
+            organization_user_id = self.organization.organization_users.get(
+                user=self.anotheruser
+            ).pk
+            payload['organization_users-0-DELETE'] = 'on'
+            payload['organization_users-0-id'] = organization_user_id
+            payload['organization_users-INITIAL_FORMS'] = 1
+
+        payload.update(extra_payload)
+
+        url = reverse(
+            'admin:organizations_organization_change',
+            kwargs={'object_id': self.organization.id},
+        )
+        with immediate_on_commit():
+            response = self.client.post(url, data=payload, follow=True)
+        return response

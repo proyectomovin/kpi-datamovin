@@ -1,0 +1,141 @@
+// DEPRECATED: please don't use this component. From now on, we will only use
+// the `Button` component (from `js/components/common/button`) as it covers
+// all possible cases.
+// This component is still here, because it's being used by few non-React places
+// like Form Builder, alertifyjs, and django templates.
+
+@use 'scss/colors';
+@use 'scss/_variables';
+
+/*
+  This is a simple colored button.
+
+  The default color is gray, other available are:
+  - blue
+  - red
+  - storm
+  - teal
+  - whitegray
+
+  Other modifiers:
+  - fullwidth
+  - pending
+  - small
+
+  NOTE: Please __do not @extend__ this component. If possible use
+  `bem.KoboButton` or raw class names.
+*/
+
+.kobo-button {
+  display: inline-block;
+  vertical-align: middle;
+  position: relative; // needed for tooltips etc.
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  text-decoration: none;
+  text-align: center;
+  border-radius: 6px;
+  color: colors.$kobo-white;
+  background-color: colors.$kobo-gray-700;
+  box-shadow: 0 2px 4px 0 rgb(0 0 0 / 25%);
+  height: auto;
+  min-height: 40px;
+  line-height: 30px;
+  padding: 5px 30px;
+  margin: 0;
+  border: none;
+
+  &[disabled] {
+    pointer-events: none;
+    color: rgba(colors.$kobo-white, 0.75);
+    // We have it so it works with every `background-color` we use.
+    background-image: variables.$png-black-10;
+  }
+
+  &:hover {
+    // We have it so it works with every `background-color` we use.
+    background-image: variables.$png-black-6;
+  }
+
+  &:active {
+    // makes the shadow smaller and moves button down by small bit
+    // to make it look pressed-in
+    transform: translateY(1px);
+    box-shadow: 0 #{2px - 1px} #{4px - 1px} 0 rgb(0 0 0 / 25%);
+  }
+
+  // icon inside button
+  i,
+  .k-icon {
+    vertical-align: top;
+    font-size: 21px;
+  }
+
+  &.kobo-button--small {
+    line-height: 20px;
+    min-height: 30px;
+    padding: 5px 16px;
+
+    i,
+    .k-icon {
+      font-size: 14px;
+    }
+
+    &.kobo-button--pending .k-icon.k-icon-spinner.k-spin {
+      top: calc(50% - 11px);
+      left: calc(50% - 6px);
+    }
+  }
+
+  &.kobo-button--fullwidth {
+    display: block;
+    width: 100%;
+  }
+
+  &.kobo-button--blue {
+    background-color: colors.$kobo-blue;
+  }
+
+  &.kobo-button--storm {
+    background-color: colors.$kobo-storm;
+  }
+
+  &.kobo-button--red {
+    background-color: colors.$kobo-red;
+  }
+
+  &.kobo-button--teal {
+    background-color: colors.$kobo-teal;
+  }
+
+  &.kobo-button--whitegray {
+    color: colors.$kobo-gray-800;
+    background-color: colors.$kobo-gray-200;
+
+    &[disabled] {
+      color: rgba(colors.$kobo-gray-800, 0.75);
+    }
+
+    &.kobo-button--pending .k-icon.k-icon-spinner.k-spin {
+      color: colors.$kobo-gray-800;
+    }
+  }
+
+  // NOTE: this requires `<i className='k-spin k-icon k-icon-spinner'/>` to be
+  // put inside the button
+  &.kobo-button--pending {
+    // hide button text
+    color: transparent;
+    position: relative;
+
+    .k-icon.k-icon-spinner.k-spin {
+      color: colors.$kobo-white;
+      display: block;
+      position: absolute;
+      top: calc(50% - 15px);
+      left: calc(50% - 8px);
+    }
+  }
+}

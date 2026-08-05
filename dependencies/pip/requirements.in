@@ -1,0 +1,114 @@
+# File for use with `pip-compile`; see https://github.com/nvie/pip-tools
+# https://github.com/bndr/pipreqs is a handy utility, too.
+
+# formpack
+git+https://github.com/kobotoolbox/formpack.git@0b20c04f957638df2caca3777419a933e53d9f4f#egg=formpack
+
+# More up-to-date version of django-digest than PyPI seems to have.
+# Also, python-digest is an unlisted dependency thereof.
+git+https://github.com/dimagi/python-digest@9c77ff12e7d7fedf792b25fddd7f443e1d02206f#egg=python_digest
+git+https://github.com/kobotoolbox/django-digest@a417e901c55d7c0aee89e2aab719975f45dbec4e#egg=django_digest
+
+# ssrf protect
+git+https://github.com/kobotoolbox/ssrf-protect@9b97d3f0fd8f737a38dd7a6b64efeffc03ab3cdd#egg=ssrf_protect
+
+# django-dont-vary-on
+# using a fork for django > 1.1.0 compatibility
+git+https://github.com/trevoriancox/django-dont-vary-on.git@01a804122b7ddcdc22f50b40993f91c27b03bef6#egg=django-dont-vary-on
+
+# Regular PyPI packages
+Django>=5.2,<5.3
+Markdown
+Pygments
+amqp
+billiard
+celery
+celery[redis]
+dict2xml
+dj-static
+dj-stripe>=2.9,<2.10
+stripe
+django-allauth>=65.11.2
+django-allauth[mfa]
+django-braces
+django-celery-beat
+django-constance>=4,<5
+django-cors-headers
+django-csp
+django-environ
+django-filter
+django-import-export
+django-import-export-celery
+django-extensions
+django-oauth-toolkit
+django-organizations
+django-redis
+django-storages[azure,boto3]
+django-amazon-ses
+django-webpack-loader
+django-loginas
+django-markdownx
+django-prometheus
+
+django-taggit
+django-private-storage
+djangorestframework
+djangorestframework-xml
+django-redis-sessions
+django-request-cache
+drf-extensions
+flower
+future
+geojson-rewind
+google-api-python-client
+google-cloud-speech
+google-cloud-storage
+google-cloud-translate
+jsonfield
+jsonschema
+kombu
+lxml<6  # temporary 20260226
+more-itertools
+oauthlib
+objgraph
+openpyxl
+pillow-heif
+psycopg
+pymongo<4.11.0  # for compatibility with unmaintained mongomock; see https://github.com/mongomock/mongomock/issues/912
+python-dateutil
+pyxform==3.0.0
+psutil
+requests
+regex
+responses
+shortuuid
+sqlparse
+static3
+tabulate
+ua-parser
+uWSGI
+Werkzeug
+xlrd
+xlwt
+xlutils
+XlsxWriter
+
+# These packages allow `requests` to support SNI
+pyopenssl
+ndg-httpsclient
+pyasn1
+
+# MFA
+django-trench
+
+# Sentry
+sentry-sdk
+
+# Kobocat
+modilabs-python-utils
+djangorestframework-csv
+djangorestframework-jsonp
+pandas
+
+# Api Documentation
+drf-spectacular

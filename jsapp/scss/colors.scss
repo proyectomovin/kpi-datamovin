@@ -1,0 +1,87 @@
+// DataMovin visual tokens mapped onto Kobo's stable technical color names.
+
+$datamovin-primary: #ff6d4d;
+$datamovin-primary-dark: #e05030;
+$datamovin-ink: #1a1a1a;
+$datamovin-surface: #f8f6f5;
+
+/*
+ * DataMovin neutral scale
+ */
+
+// (accessible) our black, very very rare, only use if necessary for contrast
+$kobo-gray-900: $datamovin-ink;
+
+// (accessible) active text, important text, text on background, top navigation
+// background
+$kobo-gray-800: #2e2c2b;
+
+// (accessible) default text, inactive text, options text, buttons text,
+// tabs text, notifications background, hover for popups and dropdowns
+$kobo-gray-700: #5d5855;
+
+// (readable) clickable icons on hover
+$kobo-gray-600: #817a76;
+
+// icons default (clickable), arrows and indicators default
+$kobo-gray-500: #a39b97;
+
+// inactive icons, some decorative icons
+$kobo-gray-400: #c3bcb8;
+
+// scroll bars, table lines, dividers, background of clickable icons on hover
+// when also in a highlighted table row
+$kobo-gray-300: #ddd8d5;
+
+// default light background, icons on hover, sidebar menu, table headings, …
+$kobo-gray-200: #eeeae8;
+
+// table row highlight on hover
+$kobo-gray-100: $datamovin-surface;
+
+// white background
+$kobo-white: hsl(0deg 0% 100%); // #ffffff
+
+/*
+ * Primary colours & shades
+ */
+
+$kobo-dark-blue: #9f331c;
+$kobo-hover-blue: #b83d24;
+$kobo-blue: #c94327;
+$kobo-mid-blue: #ffab98;
+$kobo-light-blue: #ffd8cf;
+$kobo-bg-blue: #fff2ee;
+
+$kobo-dark-teal: hsl(185deg 57% 25%); // #1b5e64
+$kobo-hover-teal: hsl(185deg 57% 35%); // #26838c
+$kobo-teal: hsl(185deg 57% 57%); // #52c5d0
+$kobo-mid-teal: hsl(186deg 57% 75%); // #9bdde4
+$kobo-light-teal: hsl(185deg 58% 85%); // #c3ebef
+$kobo-bg-teal: hsl(188deg 60% 95%); // #ebf8fa
+
+/*
+ * Secondary & tertiary colors
+ */
+
+$kobo-storm: hsl(224deg 33% 59%); // #7386b9
+$kobo-mid-storm: hsl(223deg 34% 79%); // #b8c2dc
+$kobo-light-storm: hsl(225deg 31% 95%); // #eef0f6 (previously $kobo-cloud)
+
+$kobo-purple: hsl(290deg 53% 65%); // #c577d5
+$kobo-violet: hsl(290deg 53% 85%); // #e6c5ed
+$kobo-pink: hsl(290deg 53% 93%); // #f4e5f7
+
+$kobo-dark-red: hsl(0deg 100% 26%); // #850000
+$kobo-red: hsl(0deg 100% 31%); // #9d0000 (previously $kobo-dark-red)
+$kobo-mid-red: hsl(0deg 100% 75%); // #ff8080 (previously $kobo-red)
+$kobo-hover-red: hsl(0deg 100% 90%); // #ffcccc
+$kobo-light-red: hsl(0deg 100% 96%); // #ffe9e9
+
+$kobo-dark-amber: hsl(30deg 100% 25%); // #803f00
+$kobo-amber: hsl(29deg 100% 75%); // #ffbe80
+$kobo-light-amber: hsl(30deg 100% 90%); // #ffe8cc
+
+$kobo-dark-green: hsl(146deg 71% 31%); // #178949
+$kobo-green: hsl(146deg 72% 75%); // #92edba
+$kobo-light-green: hsl(147deg 69% 95%); // #e3f9db (previously $kobo-lime)

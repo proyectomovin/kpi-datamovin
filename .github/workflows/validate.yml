@@ -1,0 +1,145 @@
+name: Validate DataMovin KPI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 20.18.1
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: SKIP_TS_CHECK=true npm run build:app
+      - run: npm run test:unit -- --runInBand
+
+  backend-and-assets:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgis/postgis:14-3.2@sha256:23cf687e825ded53a98cf15200314b4b12e64f0cf5baa7a75666677447ae4c17
+        env:
+          POSTGRES_USER: kobo
+          POSTGRES_PASSWORD: validation-only-postgres-password
+          POSTGRES_DB: kobotoolbox
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kobo -d kobotoolbox"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7.2@sha256:6461ca4ac0c5c9d81d53685c3bf76aa81f464a9de6cf3a97b80a1da8d1bb1de4
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - name: Audit isolated brand boundaries
+        run: python scripts/audit_brand_boundaries.py
+      - name: Scan repository for secrets
+        run: >-
+          docker run --rm -v "$PWD:/repo:ro"
+          ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f dir /repo --no-banner --redact
+      - name: Validate Python sources
+        run: python -m compileall -q kobo kpi hub
+      - name: Validate manifests and DataMovin assets
+        run: |
+          python -m json.tool static/datamovin.webmanifest > /dev/null
+          python -m json.tool kobo/apps/openrosa/apps/main/static/kobocat/images/datamovin-manifest.json > /dev/null
+          test -s static/datamovin-logo.svg
+          test -s static/datamovin-symbol.svg
+          test -s static/datamovin-login-background.png
+          test -s static/datamovin-favicon.png
+          grep -q "DataMovin" static/datamovin.webmanifest
+      - name: Build application image
+        run: docker build --tag kpi-datamovin:validation .
+      - name: Check Django configuration
+        run: |
+          docker run --rm --entrypoint python \
+            -e DJANGO_SETTINGS_MODULE=kobo.settings.prod \
+            -e DJANGO_SECRET_KEY=validation-only \
+            -e DATABASE_URL=sqlite:////tmp/datamovin-kpi.sqlite3 \
+            -e KC_DATABASE_URL=sqlite:////tmp/datamovin-kc.sqlite3 \
+            -e MONGO_DB_URL=mongodb://fakehost/formhub \
+            -e KOBOFORM_URL=https://kf.data.movin.com.ar \
+            -e KOBOCAT_URL=https://kc.data.movin.com.ar \
+            -e ENKETO_URL=https://ee.data.movin.com.ar \
+            -e SKIP_CELERY=True \
+            kpi-datamovin:validation manage.py check
+      - name: Regenerate OpenAPI and Orval
+        run: |
+          docker run --rm --entrypoint bash \
+            -e DJANGO_SETTINGS_MODULE=kobo.settings.testing \
+            -e SKIP_HEAVY_MIGRATIONS=True \
+            -e MONGO_DB_URL=mongodb://fakehost/formhub \
+            -e KPI_SRC_DIR=/srv/src/kpi \
+            -e NGINX_STATIC_DIR=/tmp/nginx-static \
+            --mount type=bind,source="$GITHUB_WORKSPACE/static/openapi",target=/srv/src/kpi/static/openapi \
+            --mount type=bind,source="$GITHUB_WORKSPACE/jsapp/js/api",target=/srv/src/kpi/jsapp/js/api \
+            kpi-datamovin:validation -lc \
+            "uv pip install mongomock==4.3.0 && python manage.py migrate constance --noinput && ./scripts/generate_api.sh"
+          git diff --exit-code -- static/openapi jsapp/js/api
+          test -z "$(git ls-files --others --exclude-standard -- static/openapi jsapp/js/api)"
+      - name: Validate generated public branding
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          roots = (Path('static/openapi'), Path('jsapp/js/api'))
+          legacy_product = 'Kobo' + 'Toolbox'
+          matches = []
+          for root in roots:
+              for path in root.rglob('*'):
+                  if not path.is_file():
+                      continue
+                  try:
+                      content = path.read_text(encoding='utf-8')
+                  except UnicodeDecodeError:
+                      continue
+                  if legacy_product in content:
+                      matches.append(path.as_posix())
+
+          if matches:
+              raise SystemExit(
+                  'Legacy public brand found in generated files: '
+                  + ', '.join(matches)
+              )
+
+          assert 'DataMovin Primary API' in Path(
+              'static/openapi/schema_v2.yaml'
+          ).read_text(encoding='utf-8')
+          assert 'DataMovin OpenRosa API' in Path(
+              'static/openapi/schema_openrosa.yaml'
+          ).read_text(encoding='utf-8')
+          PY
+      - name: Run focused backend tests
+        run: |
+          docker run --rm --network host --user root --entrypoint bash \
+            -e DJANGO_SETTINGS_MODULE=kobo.settings.testing \
+            -e MONGO_DB_URL=mongodb://fakehost/formhub \
+            -e KPI_DATABASE_URL=postgis://kobo:validation-only-postgres-password@127.0.0.1:5432/kobotoolbox \
+            -e REDIS_SESSION_URL=redis://127.0.0.1:6379/2 \
+            -e CACHE_URL=redis://127.0.0.1:6379/5 \
+            -e SERVICE_ACCOUNT_BACKEND_URL=redis://127.0.0.1:6379/6 \
+            -e CELERY_BROKER_URL=redis://127.0.0.1:6379/1 \
+            kpi-datamovin:validation -lc \
+            "uv pip sync dependencies/pip/dev_requirements.txt >/dev/null && pytest -q kpi/tests/test_registration.py kpi/tests/test_spectacular_processing.py kobo/apps/accounts/tests/test_email_content.py kobo/apps/accounts/tests/test_template_content.py kobo/apps/hook/tests/test_api_hook.py"

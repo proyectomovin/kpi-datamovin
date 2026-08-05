@@ -1,0 +1,76 @@
+import json
+import re
+
+from kpi.constants import SUBMISSION_FORMAT_TYPE_XML
+from kpi.utils.strings import to_str
+from kpi.utils.xml import fromstring_preserve_root_xmlns, xml_tostring
+from .base import BaseHookTestCase
+
+
+class ParserTestCase(BaseHookTestCase):
+
+    def test_json_parser(self):
+        hook = self._create_hook(subset_fields=['_id', 'subgroup1', 'q3'])
+
+        ServiceDefinition = hook.get_service_definition()
+        submissions = hook.asset.deployment.get_submissions(hook.asset.owner)
+        submission_id = submissions[0]['_id']
+        service_definition = ServiceDefinition(hook, submission_id)
+        expected_data = {
+            '_id': submission_id,
+            'group1/q3': u'¿Cómo está en el grupo uno la segunda vez?',
+            'group2/subgroup1/q4': u'¿Cómo está en el subgrupo uno la primera vez?',
+            'group2/subgroup1/q5': u'¿Cómo está en el subgrupo uno la segunda vez?',
+            'group2/subgroup1/q6': u'¿Cómo está en el subgrupo uno la tercera vez?',
+        }
+        self.assertEqual(service_definition._get_data(), expected_data)
+
+    def test_xml_parser(self):
+        self.asset = self.create_asset(
+            'some_asset_with_xml_submissions',
+            content=json.dumps(self.asset.content),
+            format='json',
+        )
+        self.asset.deploy(backend='mock', active=True)
+        self.asset.save()
+
+        hook = self._create_hook(
+            subset_fields=['meta', 'subgroup1', 'q3'],
+            format_type=SUBMISSION_FORMAT_TYPE_XML,
+        )
+
+        ServiceDefinition = hook.get_service_definition()
+        submissions = hook.asset.deployment.get_submissions(self.asset.owner)
+        submission_id = submissions[0]['_id']
+        submission_uuid = submissions[0]['_uuid']
+        service_definition = ServiceDefinition(hook, submission_id)
+        expected_elements = fromstring_preserve_root_xmlns(
+            f'<{self.asset.uid} id="{self.asset.uid}">'
+            f'   <group1>'
+            f'      <q3>¿Cómo está en el grupo uno la segunda vez?</q3>'
+            f'   </group1>'
+            f'   <group2>'
+            f'      <subgroup1>'
+            f'          <q4>¿Cómo está en el subgrupo uno la primera vez?</q4>'
+            f'          <q5>¿Cómo está en el subgrupo uno la segunda vez?</q5>'
+            f'          <q6>¿Cómo está en el subgrupo uno la tercera vez?</q6>'
+            f'      </subgroup1>'
+            f'   </group2>'
+            f'   <meta>'
+            f'      <instanceID>uuid:{submission_uuid}</instanceID>'
+            f'   </meta>'
+            f'</{self.asset.uid}>'
+        )
+
+        expected_xml = xml_tostring(
+            expected_elements,
+            xml_declaration=True,
+        )
+
+        def remove_whitespace(str_):
+            return re.sub(r'>\s+<', '><', to_str(str_)).strip()
+
+        self.assertEqual(
+            remove_whitespace(service_definition._get_data()),
+            remove_whitespace(expected_xml),
+        )

@@ -1,0 +1,680 @@
+# coding: utf-8
+import os
+from collections import defaultdict
+from datetime import timedelta
+
+from django.test import RequestFactory
+from django.utils import timezone
+from rest_framework import status
+from rest_framework.reverse import reverse
+
+from kobo.apps.kobo_auth.shortcuts import User
+from kpi.constants import (
+    PERM_PARTIAL_SUBMISSIONS,
+    PERM_VIEW_ASSET,
+    PERM_VIEW_SUBMISSIONS,
+)
+from kpi.models import (
+    Asset,
+    AssetExportSettings,
+    SubmissionExportTask,
+    SubmissionSynchronousExport,
+)
+from kpi.models.import_export_task import ImportExportStatusChoices
+from kpi.tests.base_test_case import BaseTestCase
+from kpi.tests.test_mock_data_exports import MockDataExportsBase
+from kpi.tests.utils.transaction import immediate_on_commit
+from kpi.urls.router_api_v2 import URL_NAMESPACE as ROUTER_URL_NAMESPACE
+from kpi.utils.object_permission import get_anonymous_user
+
+
+class AssetExportTaskTestV2(MockDataExportsBase, BaseTestCase):
+
+    URL_NAMESPACE = ROUTER_URL_NAMESPACE
+
+    def _create_export_task(self, asset=None, user=None, _type='csv', request=None):
+        uid = self.asset.uid if asset is None else asset.uid
+        user = self.user if user is None else user
+        if request is not None:
+            source = reverse(
+                self._get_endpoint('asset-detail'),
+                kwargs={'uid_asset': uid},
+                request=request,
+            )
+        else:
+            source = reverse(
+                self._get_endpoint('asset-detail'), kwargs={'uid_asset': uid}
+            )
+
+        export_task = SubmissionExportTask()
+        export_task.user = user
+        export_task.data = {
+            'source': source,
+            'type': _type,
+        }
+        messages = defaultdict(list)
+        export_task._run_task(messages)
+
+        return export_task
+
+    def _create_cloned_asset(self):
+        asset = Asset()
+        asset.owner = self.asset.owner
+        asset.content = self.asset.content
+        asset.save()
+        asset.deploy(backend='mock', active=True)
+        asset.save()
+
+        return asset
+
+    def _create_export_settings(self):
+        settings_name = 'Simple CSV export'
+        export_settings = {
+            'fields_from_all_versions': 'true',
+            'group_sep': '/',
+            'hierarchy_in_labels': 'true',
+            'lang': '_default',
+            'multiple_select': 'both',
+            'type': 'csv',
+        }
+        return AssetExportSettings.objects.create(
+            asset=self.asset,
+            name=settings_name,
+            export_settings=export_settings,
+        )
+
+    def test_export_task_list(self):
+        new_asset = self._create_cloned_asset()
+        for _type in ['csv', 'xls', 'spss_labels']:
+            self._create_export_task(_type=_type)
+            self._create_export_task(asset=new_asset, _type=_type)
+
+        self.client.login(username='someuser', password='someuser')
+        list_url = reverse(
+            self._get_endpoint('asset-export-list'),
+            kwargs={'format': 'json', 'uid_asset': self.asset.uid},
+        )
+        response = self.client.get(list_url)
+        assert response.status_code == status.HTTP_200_OK
+
+        data = response.json()
+        assert data['count'] == 3
+
+        # check that all the sources are from self.asset
+        assert all(
+            [self.asset.uid in d['data']['source'] for d in data['results']]
+        )
+
+    def test_export_task_list_anon(self):
+        for _type in ['csv', 'xls', 'spss_labels']:
+            self._create_export_task(_type=_type)
+
+        self.client.logout()
+        list_url = reverse(
+            self._get_endpoint('asset-export-list'),
+            kwargs={'format': 'json', 'uid_asset': self.asset.uid},
+        )
+        response = self.client.get(list_url)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_export_task_list_anon_public_asset(self):
+        # make submissions public
+        self.asset.assign_perm(get_anonymous_user(), PERM_VIEW_SUBMISSIONS)
+        for _type in ['csv', 'xls', 'spss_labels']:
+            self._create_export_task(_type=_type)
+
+        self.client.logout()
+        list_url = reverse(
+            self._get_endpoint('asset-export-list'),
+            kwargs={'format': 'json', 'uid_asset': self.asset.uid},
+        )
+        response = self.client.get(list_url)
+        assert response.status_code == status.HTTP_200_OK
+
+        data = response.json()
+        # should not list any results as exports were created by another user
+        assert not data['results']
+
+    def test_create_export_anon(self):
+        anon = get_anonymous_user()
+        self.asset.assign_perm(anon, PERM_VIEW_SUBMISSIONS)
+        self._create_export_task(_type='xls', user=self.user)
+
+        self.client.logout()
+        self._create_export_task(_type='xls', user=anon)
+        list_url = reverse(
+            self._get_endpoint('asset-export-list'),
+            kwargs={'format': 'json', 'uid_asset': self.asset.uid},
+        )
+        response = self.client.get(list_url)
+        assert response.status_code == status.HTTP_200_OK
+
+        data = response.json()
+        # two total exports on asset, but only one by anon
+        assert len(data['results']) == 1
+
+        download_url = data['results'][0]['result']
+        download_response = self.client.get(download_url)
+        assert download_response.status_code == status.HTTP_200_OK
+
+        self.asset.remove_perm(anon, PERM_VIEW_SUBMISSIONS)
+        download_response = self.client.get(download_url)
+        assert download_response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_create_export_anon_already_running(self):
+        self.client.logout()
+        anon = get_anonymous_user()
+        self.asset.assign_perm(anon, PERM_VIEW_SUBMISSIONS)
+        request = RequestFactory().get('/')
+        task = self._create_export_task(_type='xls', user=anon, request=request)
+        # pretend the task is still in progress
+        task.status = 'processing'
+        task.save()
+        list_url = reverse(
+            self._get_endpoint('asset-export-list'),
+            kwargs={'format': 'json', 'uid_asset': self.asset.uid},
+        )
+        export_settings = {
+            'fields_from_all_versions': 'true',
+            'group_sep': '/',
+            'hierarchy_in_labels': 'true',
+            'lang': '_default',
+            'multiple_select': 'both',
+            'type': 'csv',
+        }
+        response = self.client.post(list_url, data=export_settings)
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        error_message = response.json().get('error')
+        assert 'Please retry' in error_message
+
+    def test_create_export_anon_already_running_too_old(self):
+        self.client.logout()
+        anon = get_anonymous_user()
+        self.asset.assign_perm(anon, PERM_VIEW_SUBMISSIONS)
+        request = RequestFactory().get('/')
+        task = self._create_export_task(_type='xls', user=anon, request=request)
+        three_days_ago = timezone.now() - timedelta(days=3)
+        # pretend the task is stuck
+        task.status = ImportExportStatusChoices.PROCESSING
+        task.date_created = three_days_ago
+        task.save()
+        list_url = reverse(
+            self._get_endpoint('asset-export-list'),
+            kwargs={'format': 'json', 'uid_asset': self.asset.uid},
+        )
+        export_settings = {
+            'fields_from_all_versions': 'true',
+            'group_sep': '/',
+            'hierarchy_in_labels': 'true',
+            'lang': '_default',
+            'multiple_select': 'both',
+            'type': 'csv',
+        }
+        response = self.client.post(list_url, data=export_settings)
+        assert response.status_code == status.HTTP_201_CREATED
+        data = response.json()
+        # we should have created a new task and the old task should be marked as errored
+        assert SubmissionExportTask.objects.count() == 2
+        assert data['uid'] != task.uid
+        task.refresh_from_db()
+        assert task.status == ImportExportStatusChoices.ERROR
+
+    def test_export_task_list_anotheruser(self):
+        for _type in ['csv', 'xls', 'spss_labels']:
+            self._create_export_task(_type=_type)
+
+        self.client.logout()
+        self.client.login(username='anotheruser', password='anotheruser')
+        list_url = reverse(
+            self._get_endpoint('asset-export-list'),
+            kwargs={'format': 'json', 'uid_asset': self.asset.uid},
+        )
+        response = self.client.get(list_url)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_export_task_list_partial_permissions(self):
+        self.client.logout()
+        self.client.login(username='anotheruser', password='anotheruser')
+        partial_perms = {
+            PERM_VIEW_SUBMISSIONS: [{'_submitted_by': 'someuser'}]
+        }
+        exports_list_url = reverse(
+            self._get_endpoint('asset-export-list'),
+            kwargs={'format': 'json', 'uid_asset': self.asset.uid},
+        )
+        export_settings_list_url = reverse(
+            self._get_endpoint('asset-export-settings-list'),
+            kwargs={'format': 'json', 'uid_asset': self.asset.uid},
+        )
+        response = self.client.get(exports_list_url)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        response = self.client.get(export_settings_list_url)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+        anotheruser = User.objects.get(username='anotheruser')
+        self.asset.assign_perm(anotheruser, PERM_PARTIAL_SUBMISSIONS,
+                               partial_perms=partial_perms)
+        response = self.client.get(exports_list_url)
+        assert response.status_code == status.HTTP_200_OK
+        response = self.client.get(export_settings_list_url)
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_export_task_list_filtered(self):
+        for _type in ['csv', 'csv', 'xls']:
+            self._create_export_task(_type=_type)
+
+        self.client.login(username='someuser', password='someuser')
+        list_url = reverse(
+            self._get_endpoint('asset-export-list'),
+            kwargs={'format': 'json', 'uid_asset': self.asset.uid},
+        )
+        response = self.client.get(f'{list_url}?q=data__type:csv')
+        assert response.status_code == status.HTTP_200_OK
+
+        data = response.json()
+        assert data['count'] == 2
+        # check that all the results have csv type
+        assert all([d['data']['type'] == 'csv' for d in data['results']])
+
+    def test_export_task_list_ordered(self):
+        for _type in ['csv', 'xls', 'spss_labels']:
+            self._create_export_task(_type=_type)
+
+        self.client.login(username='someuser', password='someuser')
+        list_url = reverse(
+            self._get_endpoint('asset-export-list'),
+            kwargs={'format': 'json', 'uid_asset': self.asset.uid},
+        )
+        response = self.client.get(f'{list_url}?ordering=-date_created')
+        assert response.status_code == status.HTTP_200_OK
+
+        data = response.json()
+        created_dates = [d['date_created'] for d in data['results']]
+        assert list(reversed(sorted(created_dates))) == created_dates
+
+        # Ensure that the opposite ordering also works
+        response = self.client.get(f'{list_url}?ordering=date_created')
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        created_dates = [d['date_created'] for d in data['results']]
+        assert sorted(created_dates) == created_dates
+
+    def test_export_task_create(self):
+        self.client.login(username='someuser', password='someuser')
+        list_url = reverse(
+            self._get_endpoint('asset-export-list'),
+            kwargs={'format': 'json', 'uid_asset': self.asset.uid},
+        )
+        data = {
+            'type': 'csv',
+            'lang': '_default',
+            'group_sep': '/',
+            'hierarchy_in_labels': 'false',
+            'fields_from_all_versions': 'false',
+            'multiple_select': 'both',
+        }
+        response = self.client.post(list_url, data=data)
+        assert response.status_code == status.HTTP_201_CREATED
+
+    def test_create_export_task_already_running(self):
+        self.client.login(username='someuser', password='someuser')
+        list_url = reverse(
+            self._get_endpoint('asset-export-list'),
+            kwargs={'format': 'json', 'uid_asset': self.asset.uid},
+        )
+        data = {
+            'type': 'csv',
+            'lang': '_default',
+            'group_sep': '/',
+            'hierarchy_in_labels': 'false',
+            'fields_from_all_versions': 'false',
+            'multiple_select': 'both',
+        }
+        response = self.client.post(list_url, data=data)
+        assert response.status_code == status.HTTP_201_CREATED
+        first_uid = response.json()['uid']
+
+        # Send an identical POST request while the first task is still in CREATED state
+        response1b = self.client.post(list_url, data=data)
+        assert response1b.status_code == status.HTTP_200_OK
+        created_state_uid = response1b.json()['uid']
+        assert first_uid == created_state_uid
+        assert SubmissionExportTask.objects.count() == 1
+
+        # Update the task status to processing to simulate it being worked on
+        task = SubmissionExportTask.objects.get(uid=first_uid)
+        task.status = ImportExportStatusChoices.PROCESSING
+        task.save()
+
+        # Send an identical POST request while the task is in PROCESSING state
+        response2 = self.client.post(list_url, data=data)
+        assert response2.status_code == status.HTTP_200_OK
+        second_uid = response2.json()['uid']
+
+        # Should return the exact same task
+        assert first_uid == second_uid
+        assert SubmissionExportTask.objects.count() == 1
+
+        # Send a different POST request (different type)
+        data['type'] = 'xls'
+        response3 = self.client.post(list_url, data=data)
+        assert response3.status_code == status.HTTP_201_CREATED
+        third_uid = response3.json()['uid']
+
+        # Should create a new task
+        assert first_uid != third_uid
+        assert SubmissionExportTask.objects.count() == 2
+
+    def test_create_export_task_extended(self):
+        self.client.login(username='someuser', password='someuser')
+        list_url = reverse(
+            self._get_endpoint('asset-export-list'),
+            kwargs={'format': 'json', 'uid_asset': self.asset.uid},
+        )
+        data = {
+            'type': 'xls',
+            'lang': '_default',
+            'group_sep': '/',
+            'hierarchy_in_labels': 'false',
+            'fields_from_all_versions': 'false',
+            'multiple_select': 'both',
+            'xls_types_as_text': False,
+            'submission_ids': [1, 2, 3],
+            'query': {'_submission_time': {'$gt': '2021-10-13'}},
+        }
+        response = self.client.post(list_url, data=data, format='json')
+        assert response.status_code == status.HTTP_201_CREATED
+
+    def test_export_task_create_with_name(self):
+        self.client.login(username='someuser', password='someuser')
+        list_url = reverse(
+            self._get_endpoint('asset-export-list'),
+            kwargs={'format': 'json', 'uid_asset': self.asset.uid},
+        )
+        data = {
+            'type': 'csv',
+            'lang': '_default',
+            'group_sep': '/',
+            'hierarchy_in_labels': 'false',
+            'fields_from_all_versions': 'false',
+            'multiple_select': 'both',
+            'name': 'Lorem Ipsum'
+        }
+        response = self.client.post(list_url, data=data)
+        assert response.status_code == status.HTTP_201_CREATED
+
+        res_data = response.json()
+        assert res_data['data']['name'] == data['name']
+
+    def test_export_task_detail(self):
+        export_task = self._create_export_task()
+
+        self.client.login(username='someuser', password='someuser')
+        detail_url = reverse(
+            self._get_endpoint('asset-export-detail'),
+            kwargs={
+                'format': 'json',
+                'uid_asset': self.asset.uid,
+                'uid_export': export_task.uid,
+            },
+        )
+        response = self.client.get(detail_url)
+        assert response.status_code == status.HTTP_200_OK
+
+        data = response.json()
+        assert self.asset.uid in data['data']['source']
+
+    def test_export_task_delete(self):
+        export_task = self._create_export_task()
+
+        self.client.login(username='someuser', password='someuser')
+        detail_url = reverse(
+            self._get_endpoint('asset-export-detail'),
+            kwargs={
+                'format': 'json',
+                'uid_asset': self.asset.uid,
+                'uid_export': export_task.uid,
+            },
+        )
+        response = self.client.delete(detail_url)
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+
+    def test_synchronus_export_when_existing_failed(self):
+        es = self._create_export_settings()
+        synchronous_exports_url = reverse(
+            self._get_endpoint('asset-export-settings-synchronous-data'),
+            kwargs={
+                'uid_asset': self.asset.uid,
+                'uid_export_setting': es.uid,
+                'format': 'csv',
+            },
+        )
+        self.client.login(username='someuser', password='someuser')
+        response = self.client.get(synchronous_exports_url, follow=True)
+        assert response.status_code == status.HTTP_200_OK
+
+        synch_exp = SubmissionSynchronousExport.objects.all()
+        assert len(synch_exp) == 1
+        synch_exp = synch_exp[0]
+        assert synch_exp.status == ImportExportStatusChoices.COMPLETE
+
+        synch_exp.status = ImportExportStatusChoices.ERROR
+        synch_exp.save()
+
+        response = self.client.get(synchronous_exports_url, follow=True)
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert response.content.startswith('Synchronous export failed'.encode())
+        assert 'Retry-After' not in response.headers
+
+        created = synch_exp.date_created
+        synch_exp.date_created = created.replace(year=created.year - 1)
+        synch_exp.save()
+
+        response = self.client.get(synchronous_exports_url, follow=True)
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_synchronus_export_when_existing_processing(self):
+        es = self._create_export_settings()
+        synchronous_exports_url = reverse(
+            self._get_endpoint('asset-export-settings-synchronous-data'),
+            kwargs={
+                'uid_asset': self.asset.uid,
+                'uid_export_setting': es.uid,
+                'format': 'csv',
+            },
+        )
+        self.client.login(username='someuser', password='someuser')
+        response = self.client.get(synchronous_exports_url, follow=True)
+        assert response.status_code == status.HTTP_200_OK
+
+        synch_exp = SubmissionSynchronousExport.objects.all()
+        assert len(synch_exp) == 1
+        synch_exp = synch_exp[0]
+        assert synch_exp.status == ImportExportStatusChoices.COMPLETE
+
+        synch_exp.status = ImportExportStatusChoices.PROCESSING
+        synch_exp.save()
+
+        response = self.client.get(synchronous_exports_url, follow=True)
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert response.content.startswith(
+            'Another client has already requested this synchronous export'.encode()
+        )
+        assert 'Retry-After' in response.headers
+
+        created = synch_exp.date_created
+        synch_exp.date_created = created.replace(year=created.year - 1)
+        synch_exp.save()
+
+        response = self.client.get(synchronous_exports_url, follow=True)
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_synchronous_csv_export_matches_async_export(self):
+        es = self._create_export_settings()
+
+        self.client.login(username='someuser', password='someuser')
+        synchronous_exports_url = reverse(
+            self._get_endpoint('asset-export-settings-synchronous-data'),
+            kwargs={
+                'uid_asset': self.asset.uid,
+                'uid_export_setting': es.uid,
+                'format': 'csv',
+            },
+        )
+        synchronous_export_response = self.client.get(
+            synchronous_exports_url, follow=True
+        )
+        assert synchronous_export_response.status_code == status.HTTP_200_OK
+        synchronous_export_content = b''.join(
+            synchronous_export_response.streaming_content
+        )
+
+        exports_list_url = reverse(
+            self._get_endpoint('asset-export-list'),
+            kwargs={'format': 'json', 'uid_asset': self.asset.uid},
+        )
+        with immediate_on_commit():
+            exports_list_response = self.client.post(
+                exports_list_url, data=es.export_settings
+            )
+        assert exports_list_response.status_code == status.HTTP_201_CREATED
+
+        exports_detail_response = self.client.get(
+            exports_list_response.data['url'], headers={'accept': 'application/json'}
+        )
+        assert exports_detail_response.status_code == status.HTTP_200_OK
+
+        export_content_response = self.client.get(
+            exports_detail_response.json()['result']
+        )
+        assert export_content_response.status_code == status.HTTP_200_OK
+        export_content = ''.join(
+            line.decode() for line in export_content_response.streaming_content
+        )
+        assert synchronous_export_content.decode() == export_content
+
+    def test_synchronous_csv_export_anonymous_without_permission(self):
+        es = self._create_export_settings()
+        synchronous_exports_url = reverse(
+            self._get_endpoint('asset-export-settings-synchronous-data'),
+            kwargs={
+                'uid_asset': self.asset.uid,
+                'uid_export_setting': es.uid,
+                'format': 'csv',
+            },
+        )
+        response = self.client.get(synchronous_exports_url)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_synchronous_csv_export_anonymous_with_permission(self):
+        self.asset.assign_perm(get_anonymous_user(), PERM_VIEW_SUBMISSIONS)
+        es = self._create_export_settings()
+        synchronous_exports_url = reverse(
+            self._get_endpoint('asset-export-settings-synchronous-data'),
+            kwargs={
+                'uid_asset': self.asset.uid,
+                'uid_export_setting': es.uid,
+                'format': 'csv',
+            },
+        )
+        response = self.client.get(synchronous_exports_url, follow=True)
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_synchronous_csv_export_anotheruser_without_permission(self):
+        anotheruser = User.objects.get(username='anotheruser')
+        self.asset.assign_perm(anotheruser, PERM_VIEW_ASSET)
+
+        es = self._create_export_settings()
+
+        self.client.login(username='anotheruser', password='anotheruser')
+        synchronous_exports_url = reverse(
+            self._get_endpoint('asset-export-settings-synchronous-data'),
+            kwargs={
+                'uid_asset': self.asset.uid,
+                'uid_export_setting': es.uid,
+                'format': 'csv',
+            },
+        )
+        response = self.client.get(synchronous_exports_url, follow=True)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_synchronous_csv_export_anotheruser_with_partial_permission(self):
+        partial_perms = {
+            PERM_VIEW_SUBMISSIONS: [{'_submitted_by': 'anotheruser'}]
+        }
+        anotheruser = User.objects.get(username='anotheruser')
+        self.asset.assign_perm(
+            anotheruser, PERM_PARTIAL_SUBMISSIONS, partial_perms=partial_perms
+        )
+
+        es = self._create_export_settings()
+
+        self.client.login(username='anotheruser', password='anotheruser')
+        synchronous_exports_url = reverse(
+            self._get_endpoint('asset-export-settings-synchronous-data'),
+            kwargs={
+                'uid_asset': self.asset.uid,
+                'uid_export_setting': es.uid,
+                'format': 'csv',
+            },
+        )
+        response = self.client.get(synchronous_exports_url, follow=True)
+        assert response.status_code == status.HTTP_200_OK
+
+        # Submissions start after header and hxl rows
+        content = b''.join(response.streaming_content)
+        exported_submissions = (
+            content.decode().strip().split('\r\n')[2:]
+        )
+        actual_submissions = self.asset.deployment.get_submissions(user=anotheruser)
+        assert len(exported_submissions) == len(actual_submissions)
+
+    def test_synchronous_csv_export_bad_user_agent_does_not_redirect(self):
+        es = self._create_export_settings()
+
+        self.client.login(username='someuser', password='someuser')
+        synchronous_exports_url = reverse(
+            self._get_endpoint('asset-export-settings-synchronous-data'),
+            kwargs={
+                'uid_asset': self.asset.uid,
+                'uid_export_setting': es.uid,
+                'format': 'csv',
+            },
+        )
+        synchronous_export_response = self.client.get(
+            synchronous_exports_url,
+            headers={
+                'user-agent': 'Microsoft.Data.Mashup (https://go.microsoft.com/fwlink/?LinkID=304225)'  # noqa E501
+            },
+        )
+        assert synchronous_export_response.status_code == status.HTTP_200_OK
+        first_line = next(synchronous_export_response.streaming_content)
+        assert b'Do_you_descend_from_unicellular_organism' in first_line
+
+    def test_export_asset_with_slashes(self):
+        """
+        Ensure that the slashes are stripped from filename
+        """
+        self.asset.name = f'Simplified name - 2022/12/06'
+        self.asset.save()
+        self.client.login(username='someuser', password='someuser')
+        list_url = reverse(
+            self._get_endpoint('asset-export-list'),
+            kwargs={'format': 'json', 'uid_asset': self.asset.uid},
+        )
+        data = {
+            'type': 'xls',
+            'lang': '_default',
+            'group_sep': '/',
+            'hierarchy_in_labels': 'false',
+            'fields_from_all_versions': 'false',
+            'multiple_select': 'both',
+        }
+        with immediate_on_commit():
+            response = self.client.post(list_url, data=data)
+        assert response.status_code == status.HTTP_201_CREATED
+        export_response = self.client.get(response.data['url'])
+        filepath = export_response.data['result']
+        dirname, filename = os.path.split(filepath)
+        expected_filename_start = 'Simplified_name_-_20221206'
+        assert filename.startswith(expected_filename_start)

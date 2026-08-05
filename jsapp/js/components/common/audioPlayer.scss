@@ -1,0 +1,52 @@
+@use "scss/colors";
+@use "scss/mixins";
+
+.audio-player {
+  @include mixins.centerRowFlex;
+
+  flex-wrap: wrap;
+
+  .audio-player__controls {
+    margin-top: 8px;
+    // this % calculates to around 8px for regular modal size, will be a bit
+    // smaller on mobile
+    margin-right: 2.3%;
+  }
+
+  .loading {
+    margin: 24px;
+  }
+}
+
+.audio-player__name {
+  @include mixins.centerRowFlex;
+
+  width: 100%;
+  margin-bottom: 20px;
+
+  label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: colors.$kobo-storm;
+    font-size: 16px;
+    font-weight: 600;
+    flex: 1;
+  }
+}
+
+.audio-player__name-icon {
+  @include mixins.centerRowFlex;
+
+  justify-content: center;
+  margin-right: 18px;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background-color: colors.$kobo-light-storm;
+}
+
+.audio-player__name__right-section {
+  margin-left: 5px;
+}

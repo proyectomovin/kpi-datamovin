@@ -1,0 +1,19 @@
+@use 'scss/colors';
+@use 'scss/libs/_mdl';
+
+.body {
+  flex: 5;
+}
+
+.token {
+  input {
+    // API token display
+    font-family: mdl.$font_mono;
+  }
+}
+
+.options {
+  flex: 3;
+  display: flex;
+  justify-content: flex-end;
+}

@@ -1,0 +1,20 @@
+@use 'scss/colors';
+
+.multi-checkbox {
+  list-style: none;
+  height: auto;
+  width: 100%;
+  overflow: hidden auto;
+  text-align: initial;
+  padding: 0;
+}
+
+.multi-checkbox__item:not(:last-child) {
+  margin-bottom: 12px;
+}
+
+.multi-checkbox.multi-checkbox--type-frame {
+  padding: 12px;
+  border: 1px solid colors.$kobo-gray-300;
+  border-radius: 2px;
+}

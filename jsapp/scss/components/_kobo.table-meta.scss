@@ -1,0 +1,60 @@
+@use 'scss/colors';
+@use 'scss/mixins';
+@use 'scss/breakpoints';
+
+.table-meta {
+  flex-grow: 1;
+  min-height: 30px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+
+  .table-meta__bulk-options {
+    > *:not(:first-child) {
+      margin-left: 10px;
+    }
+  }
+
+  .table-meta__counter {
+    display: inline;
+    white-space: nowrap;
+  }
+}
+
+.table-meta__bulk-options {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+
+  .popover-menu .popover-menu__toggle {
+    // overriding 36px from jsapp/scss/components/_kobo.form-view.scss
+    height: auto;
+  }
+}
+
+.bulk-clear-badge-icon {
+  border: none;
+  background: transparent;
+  margin-right: -5px;
+  cursor: pointer;
+  width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 50%;
+  color: colors.$kobo-gray-800;
+
+  &:hover {
+    color: colors.$kobo-white;
+    background-color: colors.$kobo-red;
+  }
+}
+
+.table-meta__additional-text {
+  display: none;
+}
+
+@include breakpoints.breakpoint(mediumAndUp) {
+  .table-meta__additional-text {
+    display: initial;
+  }
+}

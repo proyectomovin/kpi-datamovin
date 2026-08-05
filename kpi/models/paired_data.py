@@ -1,0 +1,310 @@
+# coding: utf-8
+import time
+from typing import Union
+
+from django.conf import settings
+from rest_framework.reverse import reverse
+
+from kpi.constants import (
+    API_NAMESPACES,
+    PERM_PARTIAL_SUBMISSIONS,
+    PERM_VIEW_SUBMISSIONS,
+)
+from kpi.exceptions import PairedDataException
+from kpi.fields import KpiUidField
+from kpi.interfaces import OpenRosaManifestInterface, SyncBackendMediaInterface
+from kpi.models.asset_file import AssetFile
+from kpi.utils.hash import calculate_hash
+from kpi.utils.urls import versioned_reverse
+
+
+# FIXME: simplify this by making PairedData a real Django Model ^_^
+class PairedData(OpenRosaManifestInterface,
+                 SyncBackendMediaInterface):
+
+    # `filename` implements:
+    # - `OpenRosaManifestInterface.filename()`
+    # - `SyncBackendMediaInterface.filename()`
+    filename = None
+
+    # FIXME after merging kpi#3268
+    # `file_type` implements `SyncBackendMediaInterface.file_type()`
+    # file_type = 'paired_data'
+
+    def __init__(
+        self,
+        source_asset_or_uid: Union['kpi.models.Asset', str],
+        filename: str,
+        fields: list,
+        asset: 'kpi.models.Asset',
+        paired_data_uid: str = None,
+    ):
+        """
+        Usually, this constructor should NOT be called directly except when
+        creating a new paired data relationship. To retrieve existing pairings,
+        use `PairedData.objects(asset)` instead.
+
+        When the submission data from `source_asset_or_uid` is collected into
+        a single XML file, it is attached to `asset` using `filename`, which
+        the content of `asset` can then reference via `xml-external` (see
+        https://xlsform.org/en/#external-xml-data). Specify a list of fields
+        from the source asset to include using `fields`, or pass an empty list
+        to include all fields.
+        """
+        try:
+            self.source_uid = source_asset_or_uid.uid
+        except AttributeError:
+            self.source_uid = source_asset_or_uid
+        self.asset = asset
+        self.filename = filename
+        self.fields = fields
+
+        if not paired_data_uid:
+            self.paired_data_uid = KpiUidField.generate_unique_id('pd')
+        else:
+            self.paired_data_uid = paired_data_uid
+
+        self._asset_file = None
+        self._source_asset = None
+
+    def __str__(self):
+        return f'<PairedData {self.paired_data_uid} ({self.filename})>'
+
+    @property
+    def allowed_fields(self) -> list | None:
+        """
+        Return the fields the destination project is allowed to pull from the
+        source.
+
+        Return value semantics:
+        - `None`  — no restriction from either side; keep all fields.
+        - non-empty list — keep only the listed fields.
+        - empty list — the source and destination field restrictions
+          have no overlap; **no data should be exposed**.
+
+        Callers must treat `None` as "no restriction" and `[]` as
+        "nothing allowed", which are two distinct states.
+        """
+
+        source_asset = self.get_source()
+        if not source_asset:
+            raise PairedDataException('No source asset found.')
+
+        source_fields = source_asset.data_sharing['fields']
+
+        if not source_fields:
+            # Source places no restriction: apply only the destination filter.
+            # Return None when neither side restricts (keep all).
+            return self.fields if self.fields else None
+
+        if not self.fields:
+            # Destination places no restriction: apply only the source filter.
+            return source_fields
+
+        # Both sides specify fields: return the intersection.
+        # An empty intersection means the two restrictions are incompatible and
+        # no fields should be shared — return [] to signal "nothing allowed".
+        return list(set(self.fields).intersection(source_fields))
+
+    @property
+    def asset_file(self):
+        if self._asset_file:
+            return self._asset_file
+        try:
+            self._asset_file = self.asset.asset_files.get(
+                uid=self.paired_data_uid
+            )
+            return self._asset_file
+        except AssetFile.DoesNotExist:
+            return None
+
+    @property
+    def backend_media_id(self):
+        """
+        Implements `SyncBackendMediaInterface.backend_media_id()`
+        """
+        from kpi.urls.router_api_v2 import URL_NAMESPACE  # avoid circular imports
+        paired_data_url = reverse(
+            f'{URL_NAMESPACE}:paired-data-external',
+            kwargs={
+                'uid_asset': self.asset.uid,
+                'uid_paired_data': self.paired_data_uid,
+                'format': 'xml'
+            },
+        )
+        return f'{settings.KOBOFORM_URL}{paired_data_url}'
+
+    def delete(self, **kwargs):
+        """
+        Implements `SyncBackendMediaInterface.delete()`
+        """
+        # Delete XML file
+        if self.asset_file:
+            self.asset_file.delete()
+            self._asset_file = None
+
+        # Update asset
+        del self.asset.paired_data[self.source_uid]
+        self.asset.save(
+            update_fields=['paired_data'],
+            adjust_content=False,
+            create_version=False,
+        )
+
+    @property
+    def deleted_at(self):
+        """
+        Implements `SyncBackendMediaInterface.deleted_at()`
+        """
+        return None
+
+    @property
+    def file_type(self):
+        return 'paired_data'
+
+    def get_download_url(self, request):
+        """
+        Implements `OpenRosaManifestInterface.get_download_url()`
+        """
+
+        return versioned_reverse(
+            'paired-data-external',
+            args=(self.asset.uid, self.paired_data_uid, 'xml'),
+            request=request,
+            url_namespace=API_NAMESPACES['default'],
+        )
+
+    @property
+    def source(self):
+        return self.get_source()
+
+    def get_source(self, force: bool = False) -> Union['Asset', None]:
+        # if `self._source_asset` has been already set once, use the cache
+        # object instead of fetching it from DB again.
+        if not force and self._source_asset:
+            return self._source_asset
+
+        # Avoid circular import
+        Asset = self.asset.__class__  # noqa
+        try:
+            source_asset = Asset.objects.only(
+                'asset_type', 'data_sharing', 'owner_id', '_deployment_data'
+            ).get(uid=self.source_uid)
+        except Asset.DoesNotExist:
+            return None
+
+        # Data sharing must be enabled on the source
+        if not source_asset.data_sharing.get('enabled'):
+            return None
+
+        # Validate `self.owner` is still allowed to see source data.
+        # Their permissions could have been revoked since they linked their
+        # form to source asset.
+        required_perms = [
+            PERM_PARTIAL_SUBMISSIONS,
+            PERM_VIEW_SUBMISSIONS,
+        ]
+        if not source_asset.has_perms(
+            self.asset.owner, required_perms, all_=False
+        ):
+            return None
+
+        self._source_asset = source_asset
+
+        return self._source_asset
+
+    @property
+    def md5_hash(self):
+        """
+        Implements:
+         - `OpenRosaManifestInterface.md5_hash()`
+         - `SyncBackendMediaInterface.md5_hash()`
+        """
+        if self.asset_file:
+            # If an AssetFile object is attached to this object, return its hash
+            return self.asset_file.md5_hash
+        else:
+            # Fallback on this custom hash which does NOT represent the real
+            # content but changes everytime to force its synchronization with
+            # the deployment back end.
+            # AssetFile object will be created on call to 'xml-external' endpoint
+            return calculate_hash(
+                f'{str(time.time())}.{self.backend_media_id}', prefix=True
+            ) + '-time'
+
+    @property
+    def is_remote_url(self):
+        """
+        Implements `SyncBackendMediaInterface.is_remote_url()`
+        """
+        return True
+
+    @property
+    def mimetype(self):
+        """
+        Implements `SyncBackendMediaInterface.mimetype()`
+        """
+        return 'application/xml'
+
+    @classmethod
+    def objects(cls, asset: 'kpi.models.Asset') -> 'kpi.models.PairedData':
+        objects_ = {}
+        for source_uid, values in asset.paired_data.items():
+            objects_[values['paired_data_uid']] = cls(
+                source_uid, asset=asset, **values
+            )
+        return objects_
+
+    def save(self, **kwargs):
+
+        # When PairedData objects are synchronize by back-end deployment class
+        # (i.e.: `sync_media_files()` is triggered), the back-end deployment class
+        # also updates the boolean `synced_with_backend`. We must handle this
+        # over here before going further to avoid calling `Asset.save()`
+        # which would call `sync_media_files()` again,
+        # which would make us enter an infinite loop.
+        try:
+            update_fields = kwargs['update_fields']
+        except KeyError:
+            pass
+        else:
+            if 'synced_with_backend' in update_fields:
+                AssetFile.objects.filter(uid=self.paired_data_uid).update(
+                    synced_with_backend=self.synced_with_backend
+                )
+                return
+
+        try:
+            self.asset.paired_data[self.source_uid]['paired_data_uid']
+            # self.paired_data_uid would have been set when `objects()`
+            # calls the constructor
+        except KeyError:
+            self.paired_data_uid = KpiUidField.generate_unique_id('pd')
+
+        self.asset.paired_data[self.source_uid] = {
+            'fields': self.fields,
+            'filename': self.filename,
+            'paired_data_uid': self.paired_data_uid,
+        }
+
+        self.asset.save(
+            update_fields=['paired_data'],
+            adjust_content=False,
+            create_version=False,
+        )
+
+    def void_external_xml_cache(self):
+        # We delete the content of `self.asset_file` to force its regeneration
+        # when the 'xml_endpoint' is called
+        if self.asset_file and self.asset_file.content:
+            self.asset_file.content.delete()
+
+    def update(self, updated_values):
+        for key, value in updated_values.items():
+            if not hasattr(self, key):
+                raise AttributeError(
+                    f"'PairedData' object has no attribute '{key}'"
+                )
+            setattr(self, key, value)
+
+        self.void_external_xml_cache()
